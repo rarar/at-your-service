@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>At Your Service</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -50,6 +51,22 @@
   #app[data-big="1"] li { font-size: 24px; padding: 16px 0; }
   #app[data-big="1"] h1 { font-size: 48px; }
   #app li.done span.c { background: var(--ac); border-color: var(--ac); }
+
+  /* phones and portrait: app on top, terminal on the bottom */
+  @media (max-width: 760px), (orientation: portrait) {
+    body { flex-direction: column-reverse; cursor: auto; }
+    #term, #app { width: 100%; height: 50%; height: 50dvh; }
+    #term { font-size: 12px; padding: 12px 14px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    #cur { height: 14px; }
+    #app { padding: 40px 24px 20px; padding-top: calc(28px + env(safe-area-inset-top)); }
+    #app h1 { font-size: 26px; margin-bottom: 14px; min-height: 32px; }
+    #app li { font-size: 16px; padding: 8px 0; gap: 12px; }
+    #app li span.c { width: 19px; height: 19px; }
+    #app li.last { margin-top: 10px; }
+    #app[data-big="1"] li { font-size: 19px; padding: 10px 0; }
+    #app[data-big="1"] h1 { font-size: 34px; }
+    #app[data-caps="1"] h1 { font-size: 18px; }
+  }
 </style>
 </head>
 <body>
