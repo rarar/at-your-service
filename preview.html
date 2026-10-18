@@ -58,17 +58,17 @@
   @media (max-width: 760px), (orientation: portrait) {
     body { flex-direction: column-reverse; cursor: auto; }
     #term, #app { width: 100%; height: 50%; height: 50dvh; }
-    #term { font-size: clamp(12px, 1.7vh, 14px); padding: 12px 14px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    #term { font-size: calc(var(--h) * .036); padding: 12px 14px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     #cur { height: 14px; }
-    #app { padding: 2.2vh 24px 1.5vh; padding-top: calc(2.2vh + env(safe-area-inset-top)); }
-    #app h1 { font-size: clamp(20px, 3.4vh, 30px); margin-bottom: 1vh; }
-    #app li { font-size: clamp(13px, 2.2vh, 19px); padding: .6vh 0; }
-    #app li.last { margin-top: .6vh; }
-    #app[data-dense="1"] li { font-size: clamp(12px, 2vh, 17px); padding: .35vh 0; }
-    #app[data-dense="1"] h1 { font-size: clamp(17px, 2.8vh, 25px); }
-    #app[data-big="1"] li { font-size: clamp(14px, 2.5vh, 21px); padding: .7vh 0; }
-    #app[data-big="1"] h1 { font-size: clamp(22px, 4vh, 36px); }
-    #app[data-caps="1"] h1 { font-size: clamp(14px, 2.3vh, 20px); }
+    #app { padding: calc(var(--h) * .06) 24px calc(var(--h) * .04); padding-top: calc(var(--h) * .06 + env(safe-area-inset-top)); }
+    #app h1 { font-size: calc(var(--h) * .082); margin-bottom: calc(var(--h) * .02); }
+    #app li { font-size: calc(var(--h) * .05); padding: calc(var(--h) * .012) 0; }
+    #app li.last { margin-top: calc(var(--h) * .015); }
+    #app[data-dense="1"] li { font-size: calc(var(--h) * .046); padding: calc(var(--h) * .008) 0; }
+    #app[data-dense="1"] h1 { font-size: calc(var(--h) * .068); }
+    #app[data-big="1"] li { font-size: calc(var(--h) * .056); padding: calc(var(--h) * .014) 0; }
+    #app[data-big="1"] h1 { font-size: calc(var(--h) * .1); }
+    #app[data-caps="1"] h1 { font-size: calc(var(--h) * .056); }
   }
 </style>
 </head>
@@ -92,6 +92,9 @@
   }
 
   const app = document.getElementById("app");
+  // size type from the pane itself, not the window
+  const fit = () => document.body.style.setProperty("--h", app.clientHeight + "px");
+  new ResizeObserver(fit).observe(app); fit();
   function look(s) {
     if (!s) return;
     for (const k in s) app.dataset[k] = s[k];
