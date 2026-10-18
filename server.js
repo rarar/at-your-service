@@ -93,8 +93,9 @@ async function ask(system, thread) {
   }
   // Claude Code, one shot, no tools, no session on disk
   return new Promise((res, rej) => {
-    execFile("claude", ["--bare", "-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
-                        "--permission-prompts", "none", "--max-turns", "1", "--system-prompt", system, thread],
+    // no --bare: it ignores the OAuth login, so it can't run on a subscription
+    execFile("claude", ["-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
+                        "--max-turns", "1", "--system-prompt", system, thread],
       { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out)));
   });
 }
