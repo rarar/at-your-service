@@ -16,6 +16,7 @@ const BACKEND  = process.env.BACKEND || "code";          // "code" = Claude Code
 const MODEL    = process.env.MODEL || (BACKEND === "code" ? "haiku" : "claude-haiku-5-5");
 const PORT     = 3000;
 const PAUSE_MS = 4000;                  // breath between agent turns
+const CLAUDE   = process.env.CLAUDE_BIN || "claude";  // path to the Claude Code CLI
 
 const AGENTS = ["atlas", "iris", "grond", "lumen", "sieve", "helm"];
 const ROLES  = ["product", "design", "backend", "frontend", "qa", "devops"];
@@ -78,6 +79,9 @@ http.createServer((req, res) => {
   res.end(fs.readFileSync(new URL("./index.html", import.meta.url)));
 }).listen(PORT, () => console.log(`http://localhost:${PORT}`));
 
+if (BACKEND === "code") execFile(CLAUDE, ["--version"], (err, out) =>
+  console.log(err ? `can't run ${CLAUDE}: ${err.message}` : `using ${CLAUDE} ${out.trim()}`));
+
 // ---------- agents ----------
 const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines, no markdown, no preamble, no quotes.`;
 const NEXT = { atlas: "iris", iris: "grond", grond: "lumen", lumen: "sieve", sieve: "helm", helm: "atlas" };
@@ -94,7 +98,7 @@ async function ask(system, thread) {
   // Claude Code, one shot, no tools, no session on disk
   return new Promise((res, rej) => {
     // no --bare: it ignores the OAuth login, so it can't run on a subscription
-    execFile("claude", ["-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
+    execFile(CLAUDE, ["-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
                         "--max-turns", "1", "--system-prompt", system, thread],
       { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out)));
   });
