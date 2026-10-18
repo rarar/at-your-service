@@ -26,13 +26,15 @@
 
   /* ---- right: the app ---- */
   #app { width: 50%; height: 100%; background: #fff; color: #1d1d1f; padding: 72px 80px; overflow: hidden; }
-  #app h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 28px; min-height: 42px; }
+  #app { display: flex; flex-direction: column; }
+  #app h1 { font-size: clamp(22px, 4.2vh, 36px); font-weight: 700; letter-spacing: -0.02em; margin-bottom: 2.5vh; min-height: 1.2em; }
   #app ul { list-style: none; }
-  #app li { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid #eee; font-size: 18px; transition: color .4s; }
-  #app li span.c { width: 22px; height: 22px; border: 1.5px solid #c7c7cc; border-radius: 50%; flex: none; transition: all .3s; }
+  #app ul { flex: 1; min-height: 0; }
+  #app li { display: flex; align-items: center; gap: .8em; padding: 1.1vh 0; border-bottom: 1px solid #eee; font-size: clamp(13px, 2.1vh, 19px); line-height: 1.25; transition: color .4s; }
+  #app li span.c { width: 1.2em; height: 1.2em; border: 1.5px solid #c7c7cc; border-radius: 50%; flex: none; transition: all .3s; }
   #app li.done span.c { background: #1d1d1f; border-color: #1d1d1f; }
   #app li.done { color: #a1a1a6; text-decoration: line-through; }
-  #app li.last { margin-top: 18px; border-bottom: 0; }
+  #app li.last { margin-top: 1.5vh; border-bottom: 0; }
 
   /* per-sprint look, set from data-* on #app */
   #app[data-font="serif"] { font-family: "New York", Georgia, serif; }
@@ -43,13 +45,13 @@
   #app[data-box="none"] li.done { text-decoration: none; opacity: .35; }
   #app[data-align="center"] { text-align: center; }
   #app[data-align="center"] li { justify-content: center; }
-  #app[data-dense="1"] li { padding: 6px 0; font-size: 16px; border-bottom: 0; }
-  #app[data-dense="1"] h1 { font-size: 26px; }
+  #app[data-dense="1"] li { padding: .6vh 0; font-size: clamp(12px, 1.9vh, 17px); border-bottom: 0; }
+  #app[data-dense="1"] h1 { font-size: clamp(18px, 3.4vh, 28px); }
   #app[data-rule="0"] li { border-bottom: 0; }
   #app[data-tint="1"] { background: var(--bg); }
-  #app[data-caps="1"] h1 { text-transform: uppercase; letter-spacing: .08em; font-size: 22px; }
-  #app[data-big="1"] li { font-size: 24px; padding: 16px 0; }
-  #app[data-big="1"] h1 { font-size: 48px; }
+  #app[data-caps="1"] h1 { text-transform: uppercase; letter-spacing: .08em; font-size: clamp(14px, 2.8vh, 24px); }
+  #app[data-big="1"] li { font-size: clamp(14px, 2.6vh, 25px); padding: 1.4vh 0; }
+  #app[data-big="1"] h1 { font-size: clamp(26px, 5.5vh, 50px); }
   #app li.done span.c { background: var(--ac); border-color: var(--ac); }
 
   /* phones and portrait: app on top, terminal on the bottom */
@@ -58,14 +60,15 @@
     #term, #app { width: 100%; height: 50%; height: 50dvh; }
     #term { font-size: 12px; padding: 12px 14px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     #cur { height: 14px; }
-    #app { padding: 40px 24px 20px; padding-top: calc(28px + env(safe-area-inset-top)); }
-    #app h1 { font-size: 26px; margin-bottom: 14px; min-height: 32px; }
-    #app li { font-size: 16px; padding: 8px 0; gap: 12px; }
-    #app li span.c { width: 19px; height: 19px; }
-    #app li.last { margin-top: 10px; }
-    #app[data-big="1"] li { font-size: 19px; padding: 10px 0; }
-    #app[data-big="1"] h1 { font-size: 34px; }
-    #app[data-caps="1"] h1 { font-size: 18px; }
+    #app { padding: 2.2vh 24px 1.5vh; padding-top: calc(2.2vh + env(safe-area-inset-top)); }
+    #app h1 { font-size: clamp(16px, 2.4vh, 26px); margin-bottom: 1vh; }
+    #app li { font-size: clamp(11px, 1.55vh, 16px); padding: .55vh 0; }
+    #app li.last { margin-top: .6vh; }
+    #app[data-dense="1"] li { font-size: clamp(10px, 1.4vh, 15px); padding: .3vh 0; }
+    #app[data-dense="1"] h1 { font-size: clamp(14px, 2vh, 22px); }
+    #app[data-big="1"] li { font-size: clamp(12px, 1.8vh, 18px); padding: .7vh 0; }
+    #app[data-big="1"] h1 { font-size: clamp(18px, 3vh, 32px); }
+    #app[data-caps="1"] h1 { font-size: clamp(12px, 1.7vh, 18px); }
   }
 </style>
 </head>
