@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
-  body { display: flex; font-family: -apple-system, "SF Pro Text", Helvetica, sans-serif; cursor: none; }
+  body { display: flex; font-family: -apple-system, "SF Pro Text", Helvetica, sans-serif; }
 
   /* ---- left: Terminal.app ---- */
   #term {
@@ -56,7 +56,7 @@
 
   /* phones and portrait: app on top, terminal on the bottom */
   @media (max-width: 760px), (orientation: portrait) {
-    body { flex-direction: column-reverse; cursor: auto; }
+    body { flex-direction: column-reverse; }
     #term, #app { width: 100%; height: 50%; height: 50dvh; }
     #term { font-size: calc(var(--h) * .036); padding: 12px 14px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     #cur { height: 14px; }

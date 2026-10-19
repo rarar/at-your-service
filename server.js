@@ -16,7 +16,7 @@ const BACKEND  = process.env.BACKEND || "code";          // "code" = Claude Code
 const MODEL    = BACKEND === "code" ? "haiku" : "claude-haiku-5-5"; // cheapest model, on purpose: ignores $MODEL
 const EFFORT   = "low";                 // less thinking per turn: cheaper and faster
 const PORT     = 3000;
-const PAUSE_MS = 1500;                  // breath between agent turns
+const PAUSE_MS = 1500;                  // least time between bells; the next agent thinks meanwhile
 const CLAUDE   = process.env.CLAUDE_BIN || "claude";  // path to the Claude Code CLI
 
 const AGENTS = ["atlas", "iris", "grond", "lumen", "sieve", "helm"];
@@ -101,7 +101,8 @@ async function ask(system, thread, lines = 3) {
   return new Promise((res, rej) => {
     // no --bare: it ignores the OAuth login, so it can't run on a subscription
     execFile(CLAUDE, ["-p", "--model", MODEL, "--effort", EFFORT, "--tools", "", "--no-session-persistence",
-                        "--max-turns", "1", "--system-prompt", system, thread],
+                        "--max-turns", "1", "--strict-mcp-config", "--disable-slash-commands", "--no-chrome",
+                        "--system-prompt", system, thread],
       { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out, lines)));
   });
 }
@@ -131,12 +132,15 @@ async function sprint(n) {
   emit({ type: "items", app: state.app, items: state.items, look: state.look });
 
   const turn = async (i, extra = "") => {
-    const out = await ask(TEAM + ` You are @${AGENTS[i]}, ${ROLES[i]}. Next is @${NEXT[AGENTS[i]]}. The app is "${state.app}". Your task: ${tasks[i]}. ${extra}`, thread);
+    const reply = ask(TEAM + ` You are @${AGENTS[i]}, ${ROLES[i]}. Next is @${NEXT[AGENTS[i]]}. The app is "${state.app}". Your task: ${tasks[i]}. ${extra}`, thread);
+    const [out] = await Promise.all([reply, gate]);
     for (const l of out) say(`[${AGENTS[i]}] ${l}`);
     thread += `\n@${AGENTS[i]}: ${out.join(" ")}`;
     return out.join(" ");
   };
-  const finish = async i => { state.items[i].done = true; emit({ type: "done", i }); ring(i); await sleep(PAUSE_MS); };
+  // the pause runs alongside the next agent's request, not before it
+  let gate = Promise.resolve();
+  const finish = async i => { state.items[i].done = true; emit({ type: "done", i }); ring(i); gate = sleep(PAUSE_MS); };
 
   for (let i = 0; i < 6; i++) {
     if (i === 4) {
@@ -153,7 +157,8 @@ async function sprint(n) {
       continue;
     }
     if (i === 1) {
-      const out = await ask(TEAM + ` You are @iris, design. Next is @grond. The app is "${state.app}". Your task: ${tasks[1]}. Choose the look. Reply with one line of tokens, then one short line saying why. Tokens: font=sans|serif|mono box=circle|square|none align=left|center dense=0|1 rule=1|0 tint=0|1 caps=0|1 big=0|1 ac=#hex bg=#hex (bg must be very light). Recent looks, do not repeat any: ${looks.slice(-4).map(l => Object.entries(l).map(([k,v])=>k+"="+v).join(" ")).join(" | ") || "none"}`, thread);
+      const reply = ask(TEAM + ` You are @iris, design. Next is @grond. The app is "${state.app}". Your task: ${tasks[1]}. Choose the look. Reply with one line of tokens, then one short line saying why. Tokens: font=sans|serif|mono box=circle|square|none align=left|center dense=0|1 rule=1|0 tint=0|1 caps=0|1 big=0|1 ac=#hex bg=#hex (bg must be very light). Recent looks, do not repeat any: ${looks.slice(-4).map(l => Object.entries(l).map(([k,v])=>k+"="+v).join(" ")).join(" | ") || "none"}`, thread);
+      const [out] = await Promise.all([reply, gate]);
       for (const l of out) say(`[iris] ${l}`);
       thread += `\n@iris: ${out.join(" ")}`;
       state.look = ensureNew(parseLook(out));
@@ -168,6 +173,7 @@ async function sprint(n) {
     await finish(i);
   }
 
+  await gate;
   say(`$ ship ${state.app}`);
   await sleep(PAUSE_MS * 2);
 }
