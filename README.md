@@ -29,6 +29,6 @@ Or with an API key: `BACKEND=api ANTHROPIC_API_KEY=sk-... node server.js`
 
 ## Knobs
 
-In `server.js`: `PAUSE_MS` (rest between turns), `MODEL`.
+In `server.js`: `PAUSE_MS` (rest between turns), `MODEL` (Haiku, the cheapest), `EFFORT`.
 In `bells.ino`: `STRIKE_MS` (pulse length).
 Ring a bell by hand: http://localhost:3000/ring/3

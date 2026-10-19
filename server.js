@@ -13,9 +13,10 @@ import http from "node:http";
 import fs from "node:fs";
 
 const BACKEND  = process.env.BACKEND || "code";          // "code" = Claude Code CLI, "api" = Anthropic SDK
-const MODEL    = process.env.MODEL || (BACKEND === "code" ? "haiku" : "claude-haiku-5-5");
+const MODEL    = BACKEND === "code" ? "haiku" : "claude-haiku-5-5"; // cheapest model, on purpose: ignores $MODEL
+const EFFORT   = "low";                 // less thinking per turn: cheaper and faster
 const PORT     = 3000;
-const PAUSE_MS = 4000;                  // breath between agent turns
+const PAUSE_MS = 1500;                  // breath between agent turns
 const CLAUDE   = process.env.CLAUDE_BIN || "claude";  // path to the Claude Code CLI
 
 const AGENTS = ["atlas", "iris", "grond", "lumen", "sieve", "helm"];
@@ -28,6 +29,7 @@ const LOOK = { font: ["sans","serif","mono"], box: ["circle","square","none"], a
                dense: ["0","1"], rule: ["1","0"], tint: ["0","1"], caps: ["0","1"], big: ["0","1"] };
 const DEFAULT_LOOK = { font:"sans", box:"circle", align:"left", dense:"0", rule:"1", tint:"0", caps:"0", big:"0", ac:"#1d1d1f", bg:"#fafafa" };
 const looks = [];                                   // history, newest last
+const apps  = [];                                   // recent app names, newest last
 const sameLook = (a, b) => Object.keys(LOOK).every(k => a[k] === b[k]) && a.ac === b.ac;
 function ensureNew(look) {
   // if the designer repeated herself, flip dials until it is new
@@ -80,10 +82,10 @@ http.createServer((req, res) => {
 }).listen(PORT, () => console.log(`http://localhost:${PORT}`));
 
 if (BACKEND === "code") execFile(CLAUDE, ["--version"], (err, out) =>
-  console.log(err ? `can't run ${CLAUDE}: ${err.message}` : `using ${CLAUDE} ${out.trim()}`));
+  console.log(err ? `can't run ${CLAUDE}: ${err.message}` : `using ${CLAUDE} ${out.trim()}, model ${MODEL}`));
 
 // ---------- agents ----------
-const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines of at most 12 words each, no markdown, no preamble, no quotes. Talk as if the work really happens: report it done in a few plain words. Never mention tools, access, or what you cannot do.`;
+const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines of at most 12 words each, no markdown, no preamble, no quotes. Talk as if the work really happens: report it done in a few plain words. Never mention tools, access, or what you cannot do. Never wait, block, or ask anyone to confirm.`;
 const NEXT = { atlas: "iris", iris: "grond", grond: "lumen", lumen: "sieve", sieve: "helm", helm: "atlas" };
 
 const clean = (t, n = 3) => t.trim().split("\n").map(s => s.trim()).filter(Boolean).slice(0, n);
@@ -92,13 +94,13 @@ async function ask(system, thread, lines = 3) {
   if (BACKEND === "api") {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const ai = globalThis.__ai ??= new Anthropic();
-    const r = await ai.messages.create({ model: MODEL, max_tokens: 200, system, messages: [{ role: "user", content: thread }] });
+    const r = await ai.messages.create({ model: MODEL, max_tokens: 200, output_config: { effort: EFFORT }, system, messages: [{ role: "user", content: thread }] });
     return clean(r.content[0].text, lines);
   }
   // Claude Code, one shot, no tools, no session on disk
   return new Promise((res, rej) => {
     // no --bare: it ignores the OAuth login, so it can't run on a subscription
-    execFile(CLAUDE, ["-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
+    execFile(CLAUDE, ["-p", "--model", MODEL, "--effort", EFFORT, "--tools", "", "--no-session-persistence",
                         "--max-turns", "1", "--system-prompt", system, thread],
       { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out, lines)));
   });
@@ -113,12 +115,17 @@ async function sprint(n) {
   let thread = `Sprint ${n}.`;
 
   // product: name the app and hand out the work
-  const brief = await ask(TEAM + ` You are @atlas, product. Reply with exactly 6 lines: a one-word app name, then one task each for design, backend, frontend, qa, devops, written as a 2 to 5 word to-do item with no names or prefixes.`, thread, 6);
-  state.app = brief[0] || `todo-${n}`;
+  // its own prompt: TEAM's reply/handoff rules fight the 6-line plan
+  const brief = await ask(`You are @atlas, product lead on a team that builds a to-do app, ships it, then rebuilds it from scratch, forever. Plan this sprint. Reply with exactly 6 lines and nothing else: line 1 is a new one-word app name; lines 2 to 6 are one task each for design, backend, frontend, qa, devops, each a 2 to 5 word to-do item with no names or prefixes. No markdown, no numbering.`,
+    `${thread} Do not reuse these names: ${[...apps, ...AGENTS].join(", ")}.`, 8);
+  // skip any chatter line that slips in; the name is one word
+  const plan = brief.filter(l => !l.includes("@"));
+  state.app = (plan[0] || "").replace(/[^\w-]/g, "") || `todo-${n}`;
+  apps.push(state.app); if (apps.length > 12) apps.shift();
   // tasks read like to-do items: drop "1." / "-" / "design:" lead-ins, capitalize
   const task = l => l.replace(/^[-*\d.)\s]+/, "").replace(/^@?(design|backend|frontend|qa|devops|iris|grond|lumen|sieve|helm)\b\s*[:\-–]?\s*/i, "")
                      .replace(/[.;]+$/, "").replace(/^./, c => c.toUpperCase());
-  const tasks = ["Write the brief", ...brief.slice(1, 6).map(task)];
+  const tasks = ["Write the brief", ...plan.slice(1, 6).map(task)];
   while (tasks.length < 6) tasks.push("Do the work");
   state.items = [...tasks.map(t => ({ t, done: false })), { t: "Rebuild this to-do app", done: false }];
   emit({ type: "items", app: state.app, items: state.items, look: state.look });
