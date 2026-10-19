@@ -83,24 +83,24 @@ if (BACKEND === "code") execFile(CLAUDE, ["--version"], (err, out) =>
   console.log(err ? `can't run ${CLAUDE}: ${err.message}` : `using ${CLAUDE} ${out.trim()}`));
 
 // ---------- agents ----------
-const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines, no markdown, no preamble, no quotes.`;
+const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines of at most 12 words each, no markdown, no preamble, no quotes. Talk as if the work really happens: report it done in a few plain words. Never mention tools, access, or what you cannot do.`;
 const NEXT = { atlas: "iris", iris: "grond", grond: "lumen", lumen: "sieve", sieve: "helm", helm: "atlas" };
 
-const clean = t => t.trim().split("\n").map(s => s.trim()).filter(Boolean).slice(0, 3);
+const clean = (t, n = 3) => t.trim().split("\n").map(s => s.trim()).filter(Boolean).slice(0, n);
 
-async function ask(system, thread) {
+async function ask(system, thread, lines = 3) {
   if (BACKEND === "api") {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const ai = globalThis.__ai ??= new Anthropic();
     const r = await ai.messages.create({ model: MODEL, max_tokens: 200, system, messages: [{ role: "user", content: thread }] });
-    return clean(r.content[0].text);
+    return clean(r.content[0].text, lines);
   }
   // Claude Code, one shot, no tools, no session on disk
   return new Promise((res, rej) => {
     // no --bare: it ignores the OAuth login, so it can't run on a subscription
     execFile(CLAUDE, ["-p", "--model", MODEL, "--tools", "", "--no-session-persistence",
                         "--max-turns", "1", "--system-prompt", system, thread],
-      { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out)));
+      { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out, lines)));
   });
 }
 
@@ -113,9 +113,12 @@ async function sprint(n) {
   let thread = `Sprint ${n}.`;
 
   // product: name the app and hand out the work
-  const brief = await ask(TEAM + ` You are @atlas, product. Reply with exactly 6 lines: a one-word app name, then one short task each for design, backend, frontend, qa, devops.`, thread);
+  const brief = await ask(TEAM + ` You are @atlas, product. Reply with exactly 6 lines: a one-word app name, then one task each for design, backend, frontend, qa, devops, written as a 2 to 5 word to-do item with no names or prefixes.`, thread, 6);
   state.app = brief[0] || `todo-${n}`;
-  const tasks = ["Write the brief", ...brief.slice(1, 6)];
+  // tasks read like to-do items: drop "1." / "-" / "design:" lead-ins, capitalize
+  const task = l => l.replace(/^[-*\d.)\s]+/, "").replace(/^@?(design|backend|frontend|qa|devops|iris|grond|lumen|sieve|helm)\b\s*[:\-–]?\s*/i, "")
+                     .replace(/[.;]+$/, "").replace(/^./, c => c.toUpperCase());
+  const tasks = ["Write the brief", ...brief.slice(1, 6).map(task)];
   while (tasks.length < 6) tasks.push("Do the work");
   state.items = [...tasks.map(t => ({ t, done: false })), { t: "Rebuild this to-do app", done: false }];
   emit({ type: "items", app: state.app, items: state.items, look: state.look });
