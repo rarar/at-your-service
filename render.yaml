@@ -1,0 +1,13 @@
+# Render blueprint: New > Blueprint, pick this repo.
+services:
+  - type: web
+    name: at-your-service
+    runtime: node
+    plan: free            # sleeps when idle; the bell board wakes it (about a minute)
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false       # Render asks for it on first deploy
+      - key: BELL_KEY
+        generateValue: true
