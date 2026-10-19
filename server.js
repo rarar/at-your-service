@@ -1,5 +1,5 @@
 // At Your Service — six agents build a to-do app forever.
-// Each finished turn rings one bell over serial.
+// Every line an agent says strikes that agent's bell over serial.
 //
 //   npm install
 //   node server.js            # agents run through Claude Code (`claude -p`), your subscription
@@ -16,7 +16,8 @@ const BACKEND  = process.env.BACKEND || "code";          // "code" = Claude Code
 const MODEL    = BACKEND === "code" ? "haiku" : "claude-haiku-5-5"; // cheapest model, on purpose: ignores $MODEL
 const EFFORT   = "low";                 // less thinking per turn: cheaper and faster
 const PORT     = 3000;
-const PAUSE_MS = 1500;                  // least time between bells; the next agent thinks meanwhile
+const PAUSE_MS = 1500;                  // breath between agents; the next agent thinks meanwhile
+const LINE_MS  = 300;                   // between lines, so each line's bell strike rings clear
 const CLAUDE   = process.env.CLAUDE_BIN || "claude";  // path to the Claude Code CLI
 
 const AGENTS = ["atlas", "iris", "grond", "lumen", "sieve", "helm"];
@@ -109,6 +110,11 @@ async function ask(system, thread, lines = 3) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// one line at a time, one bell strike per line
+async function speak(i, lines) {
+  for (const l of lines) { say(`[${AGENTS[i]}] ${l}`); ring(i); await sleep(LINE_MS); }
+}
+
 async function sprint(n) {
   state.app = ""; state.items = []; state.look = { ...DEFAULT_LOOK };
   emit({ type: "reset" });
@@ -134,13 +140,13 @@ async function sprint(n) {
   const turn = async (i, extra = "") => {
     const reply = ask(TEAM + ` You are @${AGENTS[i]}, ${ROLES[i]}. Next is @${NEXT[AGENTS[i]]}. The app is "${state.app}". Your task: ${tasks[i]}. ${extra}`, thread);
     const [out] = await Promise.all([reply, gate]);
-    for (const l of out) say(`[${AGENTS[i]}] ${l}`);
+    await speak(i, out);
     thread += `\n@${AGENTS[i]}: ${out.join(" ")}`;
     return out.join(" ");
   };
   // the pause runs alongside the next agent's request, not before it
   let gate = Promise.resolve();
-  const finish = async i => { state.items[i].done = true; emit({ type: "done", i }); ring(i); gate = sleep(PAUSE_MS); };
+  const finish = async i => { state.items[i].done = true; emit({ type: "done", i }); gate = sleep(PAUSE_MS); };
 
   for (let i = 0; i < 6; i++) {
     if (i === 4) {
@@ -159,7 +165,7 @@ async function sprint(n) {
     if (i === 1) {
       const reply = ask(TEAM + ` You are @iris, design. Next is @grond. The app is "${state.app}". Your task: ${tasks[1]}. Choose the look. Reply with one line of tokens, then one short line saying why. Tokens: font=sans|serif|mono box=circle|square|none align=left|center dense=0|1 rule=1|0 tint=0|1 caps=0|1 big=0|1 ac=#hex bg=#hex (bg must be very light). Recent looks, do not repeat any: ${looks.slice(-4).map(l => Object.entries(l).map(([k,v])=>k+"="+v).join(" ")).join(" | ") || "none"}`, thread);
       const [out] = await Promise.all([reply, gate]);
-      for (const l of out) say(`[iris] ${l}`);
+      await speak(1, out);
       thread += `\n@iris: ${out.join(" ")}`;
       state.look = ensureNew(parseLook(out));
       emit({ type: "items", app: state.app, items: state.items, look: state.look });
@@ -167,7 +173,7 @@ async function sprint(n) {
     } else if (i > 0) {
       await turn(i, i === 5 ? "Ship it. Last line is the deploy line." : "Do it and report.");
     } else {
-      say(`[atlas] ${state.app}: ${tasks.slice(1).join("; ")}`);
+      await speak(0, [`${state.app}: ${tasks.slice(1).join("; ")}`]);
       thread += `\n@atlas: ${state.app}. ` + tasks.slice(1).join("; ");
     }
     await finish(i);

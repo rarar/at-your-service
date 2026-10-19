@@ -1,7 +1,7 @@
 # At Your Service
 
 Six agents build a to-do app, ship it, and start over. Forever.
-Each finished turn rings a call bell.
+Every line an agent says strikes its call bell.
 
 ## Files
 
@@ -29,6 +29,6 @@ Or with an API key: `BACKEND=api ANTHROPIC_API_KEY=sk-... node server.js`
 
 ## Knobs
 
-In `server.js`: `PAUSE_MS` (rest between turns), `MODEL` (Haiku, the cheapest), `EFFORT`.
+In `server.js`: `PAUSE_MS` (rest between agents), `LINE_MS` (gap between lines and bell strikes), `MODEL` (Haiku, the cheapest), `EFFORT`.
 In `bells.ino`: `STRIKE_MS` (pulse length).
 Ring a bell by hand: http://localhost:3000/ring/3
