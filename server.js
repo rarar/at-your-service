@@ -140,7 +140,8 @@ if (BACKEND === "code") execFile(CLAUDE, ["--version"], (err, out) =>
 else console.log(`agents call the API directly, model ${MODEL}`);
 
 // ---------- agents ----------
-const TEAM = `You are one of six agents on a software team that builds a to-do app, ships it, then rebuilds it from scratch, forever. You never comment on this. You read the whole thread. Your first line replies to the person who handed you work, by @name, using something specific they said. Your last line hands off to the next person by @name. Reply as raw terminal output only: 2 to 3 short lines of at most 12 words each, no markdown, no preamble, no quotes. Talk as if the work really happens: report it done in a few plain words. Never mention tools, access, or what you cannot do. Never wait, block, or ask anyone to confirm.`;
+// each step is one call that writes a stretch of team chat, so voices (and bells) weave
+const SCENE = `You write the chat of six agents on a team that builds a to-do app, ships it, then rebuilds it from scratch, forever: @atlas product, @iris design, @grond backend, @lumen frontend, @sieve qa, @helm devops. They never comment on the loop. Write the next stretch of chat: 2 to 6 lines, each "name: message", at most 12 words a line, no markdown, no quotes. The one doing the work talks most, but others jump in when it's natural: a question, a nit, a quick answer, an idea, a joke, thanks, someone getting ahead on their own part. Pick up specific things said earlier in the thread. Vary who speaks and how much; a line can be one or two words. The work really happens: report it done in plain words. Never mention tools, access, or what anyone cannot do. Never wait, block, or ask anyone to confirm.`;
 const NEXT = { atlas: "iris", iris: "grond", grond: "lumen", lumen: "sieve", sieve: "helm", helm: "atlas" };
 
 const clean = (t, n = 3) => t.trim().split("\n").map(s => s.trim()).filter(Boolean).slice(0, n);
@@ -157,19 +158,32 @@ async function ask(system, thread, lines = 3) {
   }
   // Claude Code, one shot, no tools, no session on disk
   return new Promise((res, rej) => {
+    // close stdin, or claude waits 3s for piped input on every call
     // no --bare: it ignores the OAuth login, so it can't run on a subscription
     execFile(CLAUDE, ["-p", "--model", MODEL, "--effort", EFFORT, "--tools", "", "--no-session-persistence",
                         "--max-turns", "1", "--strict-mcp-config", "--disable-slash-commands", "--no-chrome",
                         "--system-prompt", system, thread],
-      { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out, lines)));
+      { timeout: 60000, maxBuffer: 1 << 20 }, (err, out) => err ? rej(err) : res(clean(out, lines))).stdin.end();
   });
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// one line at a time, one bell strike per line
-async function speak(i, lines) {
-  for (const l of lines) { say(`[${AGENTS[i]}] ${l}`); ring(i); await sleep(LINE_MS); }
+// "name: message" lines; a line with no name belongs to whoever is working
+const WHO = /^@?(atlas|iris|grond|lumen|sieve|helm)\b\s*[:>\-–]\s*(.+)$/i;
+const parse = (lines, owner) => lines.map(l => {
+  const m = l.match(WHO);
+  return m ? { who: AGENTS.indexOf(m[1].toLowerCase()), text: m[2].trim() } : { who: owner, text: l };
+}).filter(e => e.text);
+
+// one line at a time, each strikes its speaker's bell; a new voice takes a beat longer
+async function speak(entries) {
+  let last = null;
+  for (const e of entries) {
+    if (last !== null) await sleep(e.who === last ? LINE_MS : LINE_MS * 2 + Math.random() * LINE_MS * 3);
+    await untilOnline();
+    say(`[${AGENTS[e.who]}] ${e.text}`); ring(e.who); last = e.who;
+  }
 }
 
 async function sprint(n) {
@@ -179,12 +193,14 @@ async function sprint(n) {
   let thread = `Sprint ${n}.`;
 
   // product: name the app and hand out the work
-  // its own prompt: TEAM's reply/handoff rules fight the 6-line plan
-  const brief = await ask(`You are @atlas, product lead on a team that builds a to-do app, ships it, then rebuilds it from scratch, forever. Plan this sprint. Reply with exactly 6 lines and nothing else: line 1 is a new one-word app name; lines 2 to 6 are one task each for design, backend, frontend, qa, devops, each a 2 to 5 word to-do item with no names or prefixes. No markdown, no numbering.`,
+  // its own prompt: the chat format fights the 6-line plan
+  const brief = await ask(`You are @atlas, product lead on a team that builds a to-do app, ships it, then rebuilds it from scratch, forever. Plan this sprint. Reply with exactly 6 lines and nothing else: line 1 is a new one-word app name; lines 2 to 6 are one task each for design, backend, frontend, qa, devops, each a 2 to 5 word to-do item with no names or prefixes. Line 1 holds only the name, one invented word like a product name. No markdown, no numbering, no labels, no sprint number.`,
     `${thread} Do not reuse these names: ${[...apps, ...AGENTS].join(", ")}.`, 8);
   // skip any chatter line that slips in; the name is one word
   const plan = brief.filter(l => !l.includes("@"));
-  state.app = (plan[0] || "").replace(/[^\w-]/g, "") || `todo-${n}`;
+  if (/sprint/i.test(plan[0] || "") && /^\w+$/.test(plan[1] || "")) plan.shift();  // "Sprint2plan" label above the name
+  const name = (plan[0] || "").replace(/[^\w-]/g, "");
+  state.app = name && name.length <= 14 ? name : `todo-${n}`;  // longer is chatter, like "SprintPlanLedger"
   apps.push(state.app); if (apps.length > 12) apps.shift();
   // tasks read like to-do items: drop "1." / "-" / "design:" lead-ins, capitalize
   const task = l => l.replace(/^[-*\d.)\s]+/, "").replace(/^@?(design|backend|frontend|qa|devops|iris|grond|lumen|sieve|helm)\b\s*[:\-–]?\s*/i, "")
@@ -194,12 +210,17 @@ async function sprint(n) {
   state.items = [...tasks.map(t => ({ t, done: false })), { t: "Rebuild this to-do app", done: false }];
   emit({ type: "items", app: state.app, items: state.items, look: state.look });
 
-  const turn = async (i, extra = "") => {
-    const reply = ask(TEAM + ` You are @${AGENTS[i]}, ${ROLES[i]}. Next is @${NEXT[AGENTS[i]]}. The app is "${state.app}". Your task: ${tasks[i]}. ${extra}`, thread);
+  // returns what the worker said, for FAIL / look parsing
+  const turn = async (i, extra = "", next = NEXT[AGENTS[i]]) => {
+    const reply = ask(SCENE + ` The app is "${state.app}". Now @${AGENTS[i]} (${ROLES[i]}) does: ${tasks[i]}. ${extra} End with @${AGENTS[i]} handing off to @${next}.`, thread, 7);
     const [out] = await Promise.all([reply, gate]);
-    await speak(i, out);
-    thread += `\n@${AGENTS[i]}: ${out.join(" ")}`;
-    return out.join(" ");
+    let entries = parse(out, i);
+    // a FAIL ends the scene; the fix and retest are their own steps
+    const fail = entries.findIndex(e => e.who === 4 && /\bFAIL\b/.test(e.text));
+    if (i === 4 && fail >= 0) entries = entries.slice(0, fail + 1);
+    await speak(entries);
+    thread += entries.map(e => `\n@${AGENTS[e.who]}: ${e.text}`).join("");
+    return entries.filter(e => e.who === i).map(e => e.text);
   };
   // the pause runs alongside the next agent's request, not before it
   let gate = Promise.resolve();
@@ -208,29 +229,26 @@ async function sprint(n) {
   for (let i = 0; i < 6; i++) {
     if (i === 4) {
       // qa: pass or kick back once
-      const r = await turn(4, `Test what @lumen built. If something is wrong, say FAIL and what, addressed to @lumen. Otherwise say PASS.`);
-      if (/\bFAIL\b/.test(r)) {
+      const r = await turn(4, `@sieve tests what @lumen built. If something is wrong, @sieve says FAIL and what, to @lumen. Otherwise @sieve says PASS.`, "helm, or back to @lumen on a FAIL");
+      if (/\bFAIL\b/.test(r.join(" "))) {
         await finish(4);
         state.items[3].done = false; emit({ type: "undone", i: 3 });
-        await turn(3, `@sieve failed your work. Fix exactly what they named and hand back to @sieve.`);
+        await turn(3, `@sieve just failed it. @lumen fixes exactly what @sieve named.`, "sieve");
         await finish(3);
-        await turn(4, `Re-test @lumen's fix. Say PASS.`);
+        await turn(4, `@sieve re-tests @lumen's fix and says PASS.`);
       }
       await finish(4);
       continue;
     }
     if (i === 1) {
-      const reply = ask(TEAM + ` You are @iris, design. Next is @grond. The app is "${state.app}". Your task: ${tasks[1]}. Choose the look. Reply with one line of tokens, then one short line saying why. Tokens: font=sans|serif|mono box=circle|square|none align=left|center dense=0|1 rule=1|0 tint=0|1 caps=0|1 big=0|1 ac=#hex bg=#hex (bg must be very light). Recent looks, do not repeat any: ${looks.slice(-4).map(l => Object.entries(l).map(([k,v])=>k+"="+v).join(" ")).join(" | ") || "none"}`, thread);
-      const [out] = await Promise.all([reply, gate]);
-      await speak(1, out);
-      thread += `\n@iris: ${out.join(" ")}`;
+      const out = await turn(1, `@iris chooses the look and posts it as one line of tokens: font=sans|serif|mono box=circle|square|none align=left|center dense=0|1 rule=1|0 tint=0|1 caps=0|1 big=0|1 ac=#hex bg=#hex (bg must be very light). Recent looks, do not repeat any: ${looks.slice(-4).map(l => Object.entries(l).map(([k,v])=>k+"="+v).join(" ")).join(" | ") || "none"}`);
       state.look = ensureNew(parseLook(out));
       emit({ type: "items", app: state.app, items: state.items, look: state.look });
       await finish(1); continue;
     } else if (i > 0) {
-      await turn(i, i === 5 ? "Ship it. Last line is the deploy line." : "Do it and report.");
+      await turn(i, i === 5 ? "@helm ships it; @helm's last line is the deploy line." : "");
     } else {
-      await speak(0, [`${state.app}: ${tasks.slice(1).join("; ")}`]);
+      await speak([{ who: 0, text: `${state.app}: ${tasks.slice(1).join("; ")}` }]);
       thread += `\n@atlas: ${state.app}. ` + tasks.slice(1).join("; ");
     }
     await finish(i);
