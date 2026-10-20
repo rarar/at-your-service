@@ -1,3 +1,4 @@
 { "name": "at-your-service", "type": "module", "scripts": { "start": "node server.js" },
-  "dependencies": { "serialport": "latest" },
-  "optionalDependencies": { "@anthropic-ai/sdk": "latest" } }
+  "engines": { "node": ">=20" },
+  "dependencies": { "@anthropic-ai/sdk": "latest", "ws": "^8.22.0" },
+  "optionalDependencies": { "serialport": "latest" } }
