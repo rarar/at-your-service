@@ -102,6 +102,8 @@ const untilOnline = () => online() ? null : new Promise(r => {
 const emit = ev => { const s = `data: ${JSON.stringify(ev)}\n\n`; for (const r of clients) r.write(s); };
 const say  = line => { state.log.push(line); state.log = state.log.slice(-300); emit({ type: "log", line }); };
 
+const ASSETS = { "/favicon.svg": "image/svg+xml", "/apple-touch-icon.png": "image/png", "/og.png": "image/png" };
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   if (url.pathname === "/events") {
@@ -113,6 +115,12 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith("/ring/")) {  // manual test: /ring/3?key=...
     if (!keyOk(req.url)) { res.writeHead(403); res.end("bad key"); return; }
     ring(+url.pathname.slice(6)); res.end("ok"); return;
+  }
+  const asset = ASSETS[url.pathname];
+  if (asset) {
+    res.writeHead(200, { "Content-Type": asset, "Cache-Control": "public, max-age=86400" });
+    res.end(fs.readFileSync(new URL("." + url.pathname, import.meta.url)));
+    return;
   }
   res.writeHead(200, { "Content-Type": "text/html" });
   res.end(fs.readFileSync(new URL("./index.html", import.meta.url)));
